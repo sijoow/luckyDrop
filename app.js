@@ -144,10 +144,9 @@ async function apiRequest(method, url, data = {}, params = {}) {
 
 /**
  * 예시: member_id를 기반으로 고객 데이터를 가져오기
+ * (이 함수에서는 별도로 토큰을 다시 불러오지 않고, 이벤트 라우트에서 최신 토큰을 가져온 후 호출됩니다.)
  */
 async function getCustomerDataByMemberId(memberId) {
-  // 무조건 MongoDB에서 최신 토큰을 불러옵니다.
-  await getTokensFromDB();
   const url = `https://${MALLID}.cafe24api.com/api/v2/admin/customersprivacy`;
   const params = { member_id: memberId };
   try {
@@ -200,7 +199,10 @@ clientInstance.connect()
         return res.status(400).json({ error: 'memberId 값이 필요합니다.' });
       }
       try {
-        // 고객 데이터 가져오기 (토큰 갱신 포함)
+        // 매 요청마다 최신 토큰 정보를 MongoDB에서 가져옵니다.
+        await getTokensFromDB();
+  
+        // 고객 데이터 가져오기 (최신 토큰 사용)
         const customerData = await getCustomerDataByMemberId(memberId);
         if (!customerData || !customerData.customersprivacy) {
           return res.status(404).json({ error: '고객 데이터를 찾을 수 없습니다.' });
