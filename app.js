@@ -50,7 +50,7 @@ async function getTokensFromDB() {
 
 /**
  * MongoDB에 토큰을 저장합니다.
-*/ 
+ */
 async function saveTokensToDB(newAccessToken, newRefreshToken) {
   const client = new MongoClient(mongoUri);
   try {
@@ -77,10 +77,10 @@ async function saveTokensToDB(newAccessToken, newRefreshToken) {
   }
 }
 
-
 /**
  * Access Token 및 Refresh Token 갱신 함수
- * API 요청 중 accessToken이 만료되어 401 에러가 발생하면 이 함수를 통해 새 토큰을 발급받고 MongoDB에 저장합니다.
+ * API 요청 중 accessToken이 만료되어 401 또는 400 에러가 발생하면
+ * refreshToken을 사용해 새 토큰을 발급받고 MongoDB에 저장합니다.
  */
 async function refreshAccessToken() {
   try {
@@ -116,7 +116,8 @@ async function refreshAccessToken() {
 
 /**
  * API 요청 함수 (자동 토큰 갱신 포함)
- * API 요청 시 accessToken 사용 후 401 에러 발생하면 refreshAccessToken()을 호출하여 재시도합니다.
+ * API 요청 시 accessToken 사용 후 401 또는 400 에러 발생하면
+ * refreshAccessToken()을 호출하여 재시도합니다.
  */
 async function apiRequest(method, url, data = {}, params = {}) {
   try {
@@ -132,8 +133,8 @@ async function apiRequest(method, url, data = {}, params = {}) {
     });
     return response.data;
   } catch (error) {
-    if (error.response && error.response.status === 401) {
-      console.log('Access Token 만료. 갱신 중...');
+    if (error.response && (error.response.status === 401 || error.response.status === 400)) {
+      console.log('Access Token 문제 발생. 갱신 중...');
       await refreshAccessToken();
       return apiRequest(method, url, data, params);
     } else {
