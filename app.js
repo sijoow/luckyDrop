@@ -20,7 +20,7 @@ const clientId = process.env.CAFE24_CLIENT_ID;
 const clientSecret = process.env.CAFE24_CLIENT_SECRET;
 const MALLID = process.env.CAFE24_MALLID || 'yogibo';
 
-// 초기 토큰 값은 process.env에서 가져오지 않고 null로 설정하여 MongoDB에서 무조건 불러오도록 함.
+// 초기 토큰 값은 MongoDB에서 반드시 불러오도록 null로 설정합니다.
 let accessToken = null;
 let refreshToken = null;
 
@@ -79,7 +79,7 @@ async function saveTokensToDB(newAccessToken, newRefreshToken) {
 
 /**
  * Access Token 및 Refresh Token 갱신 함수
- * 토큰이 만료되면 refreshAccessToken을 호출하여 새 토큰을 발급받고, 이를 MongoDB에 업데이트합니다.
+ * API 요청 중 accessToken이 만료되어 401 에러가 발생하면 이 함수를 통해 새 토큰을 발급받고 MongoDB에 저장합니다.
  */
 async function refreshAccessToken() {
   try {
@@ -98,7 +98,7 @@ async function refreshAccessToken() {
     const newRefreshToken = response.data.refresh_token;
     console.log('Access Token 갱신 성공:', newAccessToken);
     console.log('Refresh Token 갱신 성공:', newRefreshToken);
-    // 새로 발급받은 토큰을 MongoDB에 업데이트합니다.
+    // 발급받은 토큰을 MongoDB에 업데이트합니다.
     await saveTokensToDB(newAccessToken, newRefreshToken);
     accessToken = newAccessToken;
     refreshToken = newRefreshToken;
@@ -115,7 +115,7 @@ async function refreshAccessToken() {
 
 /**
  * API 요청 함수 (자동 토큰 갱신 포함)
- * API 요청 시 accessToken 사용 후 401 에러 발생하면 refreshAccessToken을 호출하여 재시도합니다.
+ * API 요청 시 accessToken 사용 후 401 에러 발생하면 refreshAccessToken()을 호출하여 재시도합니다.
  */
 async function apiRequest(method, url, data = {}, params = {}) {
   try {
@@ -143,8 +143,8 @@ async function apiRequest(method, url, data = {}, params = {}) {
 }
 
 /**
- * 예시: member_id를 기반으로 고객 데이터를 가져오기
- * (이 함수에서는 별도로 토큰을 다시 불러오지 않고, 이벤트 라우트에서 최신 토큰을 가져온 후 호출됩니다.)
+ * member_id를 기반으로 고객 데이터를 가져옵니다.
+ * (이 함수는 이벤트 응모 라우트에서 최신 토큰을 가져온 후 호출됩니다.)
  */
 async function getCustomerDataByMemberId(memberId) {
   const url = `https://${MALLID}.cafe24api.com/api/v2/admin/customersprivacy`;
@@ -158,20 +158,6 @@ async function getCustomerDataByMemberId(memberId) {
     throw error;
   }
 }
-
-// 서버 시작 시 초기 토큰을 불러오고, 1시간마다 자동 갱신하여 MongoDB에 계속 업데이트하도록 설정합니다.
-getTokensFromDB().then(() => {
-  console.log('초기 토큰 설정 완료');
-  // 1시간마다 Access Token 자동 갱신 및 DB 업데이트
-  setInterval(async () => {
-    try {
-      console.log('Access Token 자동 갱신 시도 중...');
-      await refreshAccessToken();
-    } catch (error) {
-      console.error('자동 갱신 실패:', error);
-    }
-  }, 60 * 60 * 1000); // 1시간 (60분 * 60초 * 1000밀리초)
-});
 
 // MongoDB 연결 및 Express 서버 설정 (이벤트 참여 데이터 저장)
 const clientInstance = new MongoClient(mongoUri, { useUnifiedTopology: true });
@@ -202,7 +188,7 @@ clientInstance.connect()
         // 매 요청마다 최신 토큰 정보를 MongoDB에서 가져옵니다.
         await getTokensFromDB();
   
-        // 고객 데이터 가져오기 (최신 토큰 사용)
+        // 고객 데이터 가져오기 (최신 토큰 사용, 만약 accessToken이 만료되었으면 refreshAccessToken()을 통해 재발급됨)
         const customerData = await getCustomerDataByMemberId(memberId);
         if (!customerData || !customerData.customersprivacy) {
           return res.status(404).json({ error: '고객 데이터를 찾을 수 없습니다.' });
