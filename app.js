@@ -50,7 +50,7 @@ async function getTokensFromDB() {
 
 /**
  * MongoDB에 토큰을 저장합니다.
- */
+*/ 
 async function saveTokensToDB(newAccessToken, newRefreshToken) {
   const client = new MongoClient(mongoUri);
   try {
@@ -63,9 +63,9 @@ async function saveTokensToDB(newAccessToken, newRefreshToken) {
         $set: {
           name: 'cafe24Tokens',
           accessToken: newAccessToken,
-          refreshToken: newRefreshToken,
-          updatedAt: new Date(),
+          refreshToken: newRefreshToken
         },
+        $currentDate: { updatedAt: { $type: 'date' } }
       },
       { upsert: true }
     );
@@ -76,6 +76,7 @@ async function saveTokensToDB(newAccessToken, newRefreshToken) {
     await client.close();
   }
 }
+
 
 /**
  * Access Token 및 Refresh Token 갱신 함수
