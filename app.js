@@ -21,8 +21,8 @@ const clientSecret = process.env.CAFE24_CLIENT_SECRET;
 const MALLID = process.env.CAFE24_MALLID || 'yogibo';
 
 // 초기 토큰 값은 MongoDB에서 반드시 불러오도록 null로 설정합니다.
-let accessToken = 'kMya6ufDE6gRXT39PQyDkD';
-let refreshToken = '0hFjx886BZJmMGzzrHkl9B';
+let accessToken = 'yyZ1Q7QrIdKnVDtDtieTxD';
+let refreshToken = 'ZEkpcQXSLdWgmyBdJt5ZwC';
 
 /**
  * MongoDB에서 토큰을 조회합니다.
