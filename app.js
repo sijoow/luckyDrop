@@ -79,7 +79,7 @@ async function saveTokensToDB(newAccessToken, newRefreshToken) {
 
 /**
  * Access Token 및 Refresh Token 갱신 함수
- * 토큰이 만료된 경우 refreshAccessToken을 호출하고, 새 토큰을 MongoDB에 저장합니다.
+ * 토큰이 만료되면 refreshAccessToken을 호출하여 새 토큰을 발급받고, 이를 MongoDB에 업데이트합니다.
  */
 async function refreshAccessToken() {
   try {
@@ -98,7 +98,7 @@ async function refreshAccessToken() {
     const newRefreshToken = response.data.refresh_token;
     console.log('Access Token 갱신 성공:', newAccessToken);
     console.log('Refresh Token 갱신 성공:', newRefreshToken);
-    // 갱신된 토큰을 MongoDB에 저장
+    // 새로 발급받은 토큰을 MongoDB에 업데이트합니다.
     await saveTokensToDB(newAccessToken, newRefreshToken);
     accessToken = newAccessToken;
     refreshToken = newRefreshToken;
@@ -115,7 +115,7 @@ async function refreshAccessToken() {
 
 /**
  * API 요청 함수 (자동 토큰 갱신 포함)
- * API 요청 시 accessToken을 사용하다가 401 에러 발생하면 refreshAccessToken을 호출하여 재시도합니다.
+ * API 요청 시 accessToken 사용 후 401 에러 발생하면 refreshAccessToken을 호출하여 재시도합니다.
  */
 async function apiRequest(method, url, data = {}, params = {}) {
   try {
@@ -146,7 +146,7 @@ async function apiRequest(method, url, data = {}, params = {}) {
  * 예시: member_id를 기반으로 고객 데이터를 가져오기
  */
 async function getCustomerDataByMemberId(memberId) {
-  // 무조건 MongoDB에서 토큰을 로드하여 사용
+  // 무조건 MongoDB에서 최신 토큰을 불러옵니다.
   await getTokensFromDB();
   const url = `https://${MALLID}.cafe24api.com/api/v2/admin/customersprivacy`;
   const params = { member_id: memberId };
@@ -160,6 +160,20 @@ async function getCustomerDataByMemberId(memberId) {
   }
 }
 
+// 서버 시작 시 초기 토큰을 불러오고, 1시간마다 자동 갱신하여 MongoDB에 계속 업데이트하도록 설정합니다.
+getTokensFromDB().then(() => {
+  console.log('초기 토큰 설정 완료');
+  // 1시간마다 Access Token 자동 갱신 및 DB 업데이트
+  setInterval(async () => {
+    try {
+      console.log('Access Token 자동 갱신 시도 중...');
+      await refreshAccessToken();
+    } catch (error) {
+      console.error('자동 갱신 실패:', error);
+    }
+  }, 60 * 60 * 1000); // 1시간 (60분 * 60초 * 1000밀리초)
+});
+
 // MongoDB 연결 및 Express 서버 설정 (이벤트 참여 데이터 저장)
 const clientInstance = new MongoClient(mongoUri, { useUnifiedTopology: true });
 clientInstance.connect()
@@ -168,7 +182,7 @@ clientInstance.connect()
     const db = clientInstance.db(dbName);
     const entriesCollection = db.collection('entries');
     
-    // 참여자 수 반환 라우트 (entriesCollection 사용)
+    // 참여자 수 반환 라우트
     app.get('/api/entry/count', async (req, res) => {
       try {
         const count = await entriesCollection.countDocuments();
@@ -179,25 +193,26 @@ clientInstance.connect()
       }
     });
     
+    // 이벤트 응모 라우트
     app.post('/api/entry', async (req, res) => {
       const { memberId } = req.body;
       if (!memberId) {
         return res.status(400).json({ error: 'memberId 값이 필요합니다.' });
       }
       try {
-        // 고객 데이터 가져오기 (권한 부여 포함)
+        // 고객 데이터 가져오기 (토큰 갱신 포함)
         const customerData = await getCustomerDataByMemberId(memberId);
         if (!customerData || !customerData.customersprivacy) {
           return res.status(404).json({ error: '고객 데이터를 찾을 수 없습니다.' });
         }
         
-        // customersprivacy가 배열인 경우 첫 번째 항목 선택
+        // customersprivacy가 배열이면 첫 번째 항목 선택
         let customerPrivacy = customerData.customersprivacy;
         if (Array.isArray(customerPrivacy)) {
           customerPrivacy = customerPrivacy[0];
         }
         
-        // 필요한 필드 추출: member_id, name, cellphone, email, address1, address2, sms, gender
+        // 필요한 필드 추출
         const { member_id, name, cellphone, email, address1, address2, sms, gender } = customerPrivacy;
         
         // 중복 참여 확인
@@ -209,7 +224,7 @@ clientInstance.connect()
         // 한국 시간 기준 날짜 생성
         const createdAtKST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
         
-        // 저장할 객체 생성 (address1과 address2 모두 저장, 고객 성함(name) 추가)
+        // 저장할 객체 생성
         const newEntry = {
           memberId: member_id,
           name,
@@ -234,6 +249,7 @@ clientInstance.connect()
       }
     });
     
+    // Excel 파일 다운로드 라우트
     app.get('/api/lucky/download', async (req, res) => {
       try {
         const entries = await entriesCollection.find({}).toArray();
@@ -251,7 +267,7 @@ clientInstance.connect()
         ];
         
         entries.forEach(entry => {
-          // address1과 address2 합치기 (address2가 있을 경우)
+          // address1과 address2 합치기
           const fullAddress = entry.address1 + (entry.address2 ? ' ' + entry.address2 : '');
           worksheet.addRow({
             createdAt: entry.createdAt,
